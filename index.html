@@ -6,9 +6,7 @@
   <title>Temps de révision</title>
 
   <style>
-    * {
-      box-sizing: border-box;
-    }
+    * { box-sizing: border-box; }
 
     body {
       margin: 0;
@@ -63,19 +61,9 @@
       -webkit-tap-highlight-color: transparent;
     }
 
-    .button:active {
-      transform: scale(0.94);
-    }
-
-    .start {
-      background: #1d1d1f;
-      color: white;
-    }
-
-    .stop {
-      background: #e5e5ea;
-      color: #1d1d1f;
-    }
+    .button:active { transform: scale(0.94); }
+    .start { background: #1d1d1f; color: white; }
+    .stop { background: #e5e5ea; color: #1d1d1f; }
 
     .stats {
       display: flex;
@@ -103,21 +91,50 @@
     }
 
     .message {
-      height: 22px;
+      min-height: 22px;
       margin-top: 22px;
       font-size: 14px;
       color: #6e6e73;
     }
 
-    @media (max-width: 380px) {
-      .timer {
-        font-size: 52px;
-      }
+    .login {
+      display: none;
+    }
 
-      .button {
-        width: 135px;
-        height: 135px;
-      }
+    .login input {
+      display: block;
+      width: 100%;
+      margin: 10px 0;
+      padding: 14px 16px;
+      border: 1px solid #d2d2d7;
+      border-radius: 14px;
+      font-size: 16px;
+      background: white;
+    }
+
+    .login button {
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 14px;
+      background: #1d1d1f;
+      color: white;
+      font-size: 16px;
+      font-weight: 600;
+      margin-top: 8px;
+    }
+
+    .error {
+      color: #b00020;
+      font-size: 14px;
+      margin-top: 12px;
+    }
+
+    #app { display: none; }
+
+    @media (max-width: 380px) {
+      .timer { font-size: 52px; }
+      .button { width: 135px; height: 135px; }
     }
   </style>
 </head>
@@ -126,42 +143,69 @@
 
   <main class="container">
 
-    <div class="title">📚 RÉVISION</div>
+    <section id="login" class="login">
+      <div class="title">📚 RÉVISION</div>
+      <div class="subtitle">Connexion</div>
 
-    <div class="subtitle">Temps de révision</div>
+      <input id="email" type="email" placeholder="Adresse e-mail" autocomplete="email">
+      <input id="password" type="password" placeholder="Mot de passe" autocomplete="current-password">
+      <button id="loginButton">SE CONNECTER</button>
+      <div id="loginMessage" class="error"></div>
+    </section>
 
-    <div id="timer" class="timer">00:00:00</div>
+    <section id="app">
 
-    <button id="mainButton" class="button start">
-      ▶ DÉMARRER
-    </button>
+      <div class="title">📚 RÉVISION</div>
+      <div class="subtitle">Temps de révision</div>
 
-    <div id="message" class="message"></div>
+      <div id="timer" class="timer">00:00:00</div>
 
-    <div class="stats">
+      <button id="mainButton" class="button start">
+        ▶ DÉMARRER
+      </button>
 
-      <div class="stat">
-        <div class="stat-label">Aujourd'hui</div>
-        <div id="today" class="stat-value">0 min</div>
+      <div id="message" class="message"></div>
+
+      <div class="stats">
+        <div class="stat">
+          <div class="stat-label">Aujourd'hui</div>
+          <div id="today" class="stat-value">0 min</div>
+        </div>
+
+        <div class="stat">
+          <div class="stat-label">Cette année</div>
+          <div id="year" class="stat-value">0 h 0 min</div>
+        </div>
       </div>
 
-      <div class="stat">
-        <div class="stat-label">Cette année</div>
-        <div id="year" class="stat-value">0 h</div>
-      </div>
-
-    </div>
+    </section>
 
   </main>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
   <script>
+    // ============================================================
+    // SUPABASE
+    // Remplace uniquement les 2 valeurs ci-dessous.
+    // ============================================================
 
-    // =========================
-    // VARIABLES
-    // =========================
+    const SUPABASE_URL = "https://fphtgzccyhztlntcgjom.supabase.co";
+    const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_mYuUnTM4iiSKdc2hc5n_cA_e8WzMUm9";
 
-    let startTime = null;
-    let interval = null;
+    const { createClient } = supabase;
+    const db = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+
+    // ============================================================
+    // ELEMENTS
+    // ============================================================
+
+    const loginSection = document.getElementById("login");
+    const appSection = document.getElementById("app");
+    const emailInput = document.getElementById("email");
+    const passwordInput = document.getElementById("password");
+    const loginButton = document.getElementById("loginButton");
+    const loginMessage = document.getElementById("loginMessage");
 
     const timer = document.getElementById("timer");
     const button = document.getElementById("mainButton");
@@ -169,194 +213,371 @@
     const todayDisplay = document.getElementById("today");
     const yearDisplay = document.getElementById("year");
 
+    let currentUser = null;
+    let timerState = null;
+    let displayInterval = null;
+    let syncInterval = null;
 
-    // =========================
-    // STOCKAGE
-    // =========================
-
-    function getSessions() {
-      return JSON.parse(localStorage.getItem("revisionSessions") || "[]");
-    }
-
-    function saveSession(duration) {
-
-      const sessions = getSessions();
-
-      sessions.push({
-        date: new Date().toISOString(),
-        duration: duration
-      });
-
-      localStorage.setItem(
-        "revisionSessions",
-        JSON.stringify(sessions)
-      );
-    }
-
-
-    // =========================
-    // FORMAT DU TEMPS
-    // =========================
+    // ============================================================
+    // FORMAT
+    // ============================================================
 
     function formatTime(seconds) {
+      seconds = Math.max(0, Math.floor(seconds));
 
       const hours = Math.floor(seconds / 3600);
-
-      const minutes = Math.floor(
-        (seconds % 3600) / 60
-      );
-
+      const minutes = Math.floor((seconds % 3600) / 60);
       const secs = seconds % 60;
 
-      return (
-        String(hours).padStart(2, "0") + ":" +
-        String(minutes).padStart(2, "0") + ":" +
-        String(secs).padStart(2, "0")
-      );
+      return String(hours).padStart(2, "0") + ":" +
+             String(minutes).padStart(2, "0") + ":" +
+             String(secs).padStart(2, "0");
     }
 
-
-    // =========================
-    // AFFICHAGE DES STATISTIQUES
-    // =========================
-
-    function updateStats() {
-
-      const sessions = getSessions();
-
-      const now = new Date();
-
-      let todaySeconds = 0;
-      let yearSeconds = 0;
-
-      sessions.forEach(session => {
-
-        const date = new Date(session.date);
-
-        if (
-          date.getFullYear() === now.getFullYear() &&
-          date.getMonth() === now.getMonth() &&
-          date.getDate() === now.getDate()
-        ) {
-          todaySeconds += session.duration;
-        }
-
-        if (
-          date.getFullYear() === now.getFullYear()
-        ) {
-          yearSeconds += session.duration;
-        }
-
-      });
-
-
-      const todayMinutes = Math.floor(todaySeconds / 60);
-
-      const yearHours = Math.floor(yearSeconds / 3600);
-
-      const yearMinutes = Math.floor(
-        (yearSeconds % 3600) / 60
-      );
-
-
-      todayDisplay.textContent =
-        todayMinutes + " min";
-
-      yearDisplay.textContent =
-        yearHours + " h " + yearMinutes + " min";
+    function formatStats(seconds) {
+      const hours = Math.floor(seconds / 3600);
+      const minutes = Math.floor((seconds % 3600) / 60);
+      return hours + " h " + minutes + " min";
     }
 
+    // ============================================================
+    // AUTHENTIFICATION
+    // ============================================================
 
-    // =========================
-    // DÉMARRER
-    // =========================
+    async function init() {
+      const { data, error } = await db.auth.getSession();
 
-    function startTimer() {
-
-      startTime = Date.now();
-
-      button.textContent = "⏹ ARRÊTER";
-
-      button.classList.remove("start");
-      button.classList.add("stop");
-
-      message.textContent = "Session en cours";
-
-      interval = setInterval(updateTimer, 250);
-
-      updateTimer();
-    }
-
-
-    // =========================
-    // CHRONOMÈTRE
-    // =========================
-
-    function updateTimer() {
-
-      if (!startTime) return;
-
-      const elapsed =
-        Math.floor((Date.now() - startTime) / 1000);
-
-      timer.textContent =
-        formatTime(elapsed);
-    }
-
-
-    // =========================
-    // ARRÊTER
-    // =========================
-
-    function stopTimer() {
-
-      if (!startTime) return;
-
-      const duration =
-        Math.floor((Date.now() - startTime) / 1000);
-
-      clearInterval(interval);
-
-      saveSession(duration);
-
-      startTime = null;
-      interval = null;
-
-      timer.textContent = "00:00:00";
-
-      button.textContent = "▶ DÉMARRER";
-
-      button.classList.remove("stop");
-      button.classList.add("start");
-
-      message.textContent =
-        "Session enregistrée ✓";
-
-      updateStats();
-    }
-
-
-    // =========================
-    // BOUTON
-    // =========================
-
-    button.addEventListener("click", () => {
-
-      if (startTime === null) {
-        startTimer();
-      } else {
-        stopTimer();
+      if (error) {
+        loginMessage.textContent = error.message;
+        showLogin();
+        return;
       }
 
+      if (data.session) {
+        currentUser = data.session.user;
+        await startApp();
+      } else {
+        showLogin();
+      }
+
+      db.auth.onAuthStateChange(async (_event, session) => {
+        if (session) {
+          currentUser = session.user;
+          await startApp();
+        } else {
+          currentUser = null;
+          showLogin();
+        }
+      });
+    }
+
+    function showLogin() {
+      loginSection.style.display = "block";
+      appSection.style.display = "none";
+    }
+
+    async function login() {
+      loginMessage.textContent = "";
+
+      const email = emailInput.value.trim();
+      const password = passwordInput.value;
+
+      if (!email || !password) {
+        loginMessage.textContent = "Entre ton e-mail et ton mot de passe.";
+        return;
+      }
+
+      loginButton.disabled = true;
+      loginButton.textContent = "CONNEXION…";
+
+      const { error } = await db.auth.signInWithPassword({
+        email,
+        password
+      });
+
+      if (error) {
+        loginMessage.textContent = error.message;
+      }
+
+      loginButton.disabled = false;
+      loginButton.textContent = "SE CONNECTER";
+    }
+
+    loginButton.addEventListener("click", login);
+
+    passwordInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") login();
     });
 
+    // ============================================================
+    // TIMER CLOUD
+    // ============================================================
 
-    // =========================
-    // INITIALISATION
-    // =========================
+    async function loadTimerState() {
+      const { data, error } = await db
+        .from("timer_state")
+        .select("*")
+        .eq("user_id", currentUser.id)
+        .maybeSingle();
 
-    updateStats();
+      if (error) {
+        message.textContent = "Erreur de synchronisation.";
+        console.error(error);
+        return;
+      }
 
+      if (!data) {
+        const { data: created, error: createError } = await db
+          .from("timer_state")
+          .insert({
+            user_id: currentUser.id,
+            is_running: false,
+            started_at: null
+          })
+          .select()
+          .single();
+
+        if (createError) {
+          message.textContent = "Erreur de création du chronomètre.";
+          console.error(createError);
+          return;
+        }
+
+        timerState = created;
+      } else {
+        timerState = data;
+      }
+
+      renderTimerState();
+    }
+
+    async function startTimer() {
+      const now = new Date().toISOString();
+
+      const { data, error } = await db
+        .from("timer_state")
+        .update({
+          is_running: true,
+          started_at: now
+        })
+        .eq("user_id", currentUser.id)
+        .select()
+        .single();
+
+      if (error) {
+        message.textContent = "Impossible de démarrer.";
+        console.error(error);
+        return;
+      }
+
+      timerState = data;
+      renderTimerState();
+    }
+
+    async function stopTimer() {
+      if (!timerState || !timerState.is_running || !timerState.started_at) {
+        return;
+      }
+
+      const endedAt = new Date();
+      const startedAt = new Date(timerState.started_at);
+      const duration = Math.max(
+        0,
+        Math.floor((endedAt.getTime() - startedAt.getTime()) / 1000)
+      );
+
+      // Enregistre la session.
+      if (duration > 0) {
+        const { error: sessionError } = await db
+          .from("sessions")
+          .insert({
+            user_id: currentUser.id,
+            started_at: timerState.started_at,
+            ended_at: endedAt.toISOString(),
+            duration_seconds: duration
+          });
+
+        if (sessionError) {
+          message.textContent = "Erreur d'enregistrement.";
+          console.error(sessionError);
+          return;
+        }
+      }
+
+      // Arrête le chronomètre dans le cloud.
+      const { data, error } = await db
+        .from("timer_state")
+        .update({
+          is_running: false,
+          started_at: null
+        })
+        .eq("user_id", currentUser.id)
+        .select()
+        .single();
+
+      if (error) {
+        message.textContent = "Impossible d'arrêter.";
+        console.error(error);
+        return;
+      }
+
+      timerState = data;
+      message.textContent = "Session enregistrée ✓";
+
+      renderTimerState();
+      await updateStats();
+    }
+
+    // ============================================================
+    // AFFICHAGE
+    // ============================================================
+
+    function renderTimerState() {
+      if (!timerState) return;
+
+      if (timerState.is_running && timerState.started_at) {
+        button.textContent = "⏹ ARRÊTER";
+        button.classList.remove("start");
+        button.classList.add("stop");
+
+        if (!message.textContent.includes("enregistrée")) {
+          message.textContent = "Session en cours";
+        }
+
+        updateTimerDisplay();
+      } else {
+        timer.textContent = "00:00:00";
+        button.textContent = "▶ DÉMARRER";
+        button.classList.remove("stop");
+        button.classList.add("start");
+
+        if (!message.textContent.includes("enregistrée")) {
+          message.textContent = "";
+        }
+      }
+    }
+
+    function updateTimerDisplay() {
+      if (!timerState || !timerState.is_running || !timerState.started_at) {
+        timer.textContent = "00:00:00";
+        return;
+      }
+
+      const started = new Date(timerState.started_at).getTime();
+      const elapsed = Math.floor((Date.now() - started) / 1000);
+
+      timer.textContent = formatTime(elapsed);
+    }
+
+    // ============================================================
+    // STATISTIQUES
+    // ============================================================
+
+    async function updateStats() {
+      const now = new Date();
+      const startOfYear = new Date(now.getFullYear(), 0, 1).toISOString();
+      const startOfTomorrow = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() + 1
+      ).toISOString();
+
+      const startOfToday = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate()
+      ).toISOString();
+
+      const { data, error } = await db
+        .from("sessions")
+        .select("started_at, duration_seconds")
+        .eq("user_id", currentUser.id)
+        .gte("started_at", startOfYear);
+
+      if (error) {
+        console.error(error);
+        return;
+      }
+
+      let yearSeconds = 0;
+      let todaySeconds = 0;
+
+      (data || []).forEach(session => {
+        const duration = Number(session.duration_seconds) || 0;
+        yearSeconds += duration;
+
+        if (
+          session.started_at >= startOfToday &&
+          session.started_at < startOfTomorrow
+        ) {
+          todaySeconds += duration;
+        }
+      });
+
+      todayDisplay.textContent = Math.floor(todaySeconds / 60) + " min";
+      yearDisplay.textContent = formatStats(yearSeconds);
+    }
+
+    // ============================================================
+    // SYNCHRONISATION ENTRE APPAREILS
+    // ============================================================
+
+    async function syncFromCloud() {
+      if (!currentUser) return;
+
+      const { data, error } = await db
+        .from("timer_state")
+        .select("*")
+        .eq("user_id", currentUser.id)
+        .maybeSingle();
+
+      if (!error && data) {
+        const wasRunning = timerState && timerState.is_running;
+        timerState = data;
+
+        if (wasRunning && !data.is_running) {
+          message.textContent = "Session enregistrée ✓";
+          await updateStats();
+        }
+
+        renderTimerState();
+      }
+    }
+
+    async function startApp() {
+      loginSection.style.display = "none";
+      appSection.style.display = "block";
+
+      await loadTimerState();
+      await updateStats();
+
+      clearInterval(displayInterval);
+      clearInterval(syncInterval);
+
+      displayInterval = setInterval(updateTimerDisplay, 250);
+
+      // Vérifie le cloud chaque seconde pour synchroniser
+      // iPhone, iPad et ordinateur.
+      syncInterval = setInterval(syncFromCloud, 1000);
+    }
+
+    // ============================================================
+    // BOUTON
+    // ============================================================
+
+    button.addEventListener("click", async () => {
+      if (!timerState || !timerState.is_running) {
+        await startTimer();
+      } else {
+        await stopTimer();
+      }
+    });
+
+    // ============================================================
+    // DÉMARRAGE
+    // ============================================================
+
+    init();
   </script>
 
 </body>
